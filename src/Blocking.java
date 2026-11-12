@@ -38,7 +38,7 @@ public class Blocking {
 	
 	Connection con;
 	Random rand = new Random(123456);
-	int num_tuple = 50000;
+	int num_tuple = 5000;
 	double max_value = 50.0f;
 	AtomicInteger tasks_finished;
 	
