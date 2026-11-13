@@ -2,12 +2,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.random.RandomGenerator;
 
@@ -35,19 +32,26 @@ import java.util.random.RandomGenerator;
 */
 
 public class Blocking {
-	public static int num_taks=30;
+	public static int num_starting_tasks = 30; // Initial starting tasks
 	public static int num_queries_per_task = 3;
 	
 	Connection con;
+	ThreadPoolExecutor executor;
 	Random rand = new Random(123456);
 	int num_tuple = 5000;
 	double max_value = 50.0f;
 	AtomicInteger tasks_finished;
 	AtomicInteger current_num_tuple;
+	AtomicInteger next_task;
+	AtomicInteger aborted_tasks;
+	volatile boolean run; // volatile needed for threads
 	
 	public Blocking(){
 		tasks_finished = new AtomicInteger(0);
 		current_num_tuple = new AtomicInteger(num_tuple);
+		next_task = new AtomicInteger(0);
+		aborted_tasks = new AtomicInteger(0);
+		run = true;
 	}
 	
 	void executeSQL(String sql, Connection con){
@@ -88,38 +92,42 @@ public class Blocking {
 			e.printStackTrace();
 		}
 	}
-	
-	public static void main(String[] args){
+
+	void generateNewTask() {
+		if (run == false) {
+			return;
+		} else {
+			try {
+				executor.execute(new Blocker(next_task.getAndIncrement()));
+			} catch (RejectedExecutionException e) {
+				// do nothing, only happens on shutdown if a thread still wants to start a new execution
+				// and the narrowly passes the run = false check.
+			}
+		}
+
+	}
+
+	public static void main(String[] args) throws InterruptedException {
 		//Create DB
 		Blocking b = new Blocking();
 		b.cerateDB();
-		
-		//Create task and their queries
-		ArrayList<Blocking.Blocker> my_tasks = new ArrayList<Blocking.Blocker>(num_taks);
-		for(int task=0;task<num_taks;task++){
-			my_tasks.add(b.new Blocker(task));
+
+		// Start Transaction generation and execution
+		b.executor =
+				(ThreadPoolExecutor) Executors.newFixedThreadPool(4);//XXX - Do not change the number of threads used
+		long start = System.currentTimeMillis();
+		for (int i = 0; i < num_starting_tasks; i++) {
+			b.generateNewTask();
 		}
-		
-		//Execute tasks
-		ThreadPoolExecutor executor = 
-				  (ThreadPoolExecutor) Executors.newFixedThreadPool(4);//XXX - Do not change the number of threads used
-		double start, stop;
-		start = System.currentTimeMillis();
-		for(Blocker task : my_tasks) {
-			executor.execute(task);
-		}
-		executor.shutdown();
-		
-		//wait for the tasks to finish
-		while(!executor.isTerminated()) {
-			try {
-				Thread.sleep(100);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-		stop = System.currentTimeMillis();
-		System.out.println("[DONE] Task execution after roughly "+(stop-start)+" ms finished: "+b.tasks_finished+" of "+num_taks);
+
+		Thread.sleep (600000);
+		b.run = false;
+		b.executor.shutdown();
+		b.executor.awaitTermination(10, TimeUnit.MINUTES);
+		long stop = System.currentTimeMillis();
+
+		System.out.println("[DONE] Task execution after roughly "+((stop-start) / 1000.0)+" s. Task throughput: "+b.tasks_finished.get() / ((stop-start) / 1000.0)+
+				"Tasks/s. Tasks finished: "+b.tasks_finished+", Tasks aborted: "+b.aborted_tasks);
 	}
 	
 	/**
@@ -154,107 +162,98 @@ public class Blocking {
 			RandomGenerator rng_for_p = RandomGenerator.getDefault(); // For true i.i.d behavior
 			p = rng_for_p.nextInt(11) / 10.0; // Outputs numbers from 0.0 to 1.0 (inclusive)
 			//System.out.println("Current p: "+p);
-
-			if (p < 0.6) {
-				// Case 1: read-only multi-point query
-				try {
+			try {
+				if (p < 0.6) {
+					// Case 1: read-only multi-point query
 					con.setAutoCommit(false);
 					con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 					int q = 0;
 					double sum = 0;
 					int random_tuple = 0;
-					//double current_val = 0; debugging var
 					ps = con.prepareStatement("Select data_value from blocking_data where data_id = ?");
 
 					while (q < num_queries_per_task) {
 						random_tuple = ThreadLocalRandom.current().nextInt(current_num_tuple.get());
 						ps.setInt(1, random_tuple);
 						rs = ps.executeQuery();
-						rs.next();
-						//current_val = rs.getDouble("data_value");
-						//sum = sum + current_val;
-						sum = sum + rs.getDouble("data_value");
+						if (rs.next()) {
+							sum = sum + rs.getDouble("data_value");
+						}
 						rs.close();
-						//System.out.println("Task "+task+", Tuple ID read: "+random_tuple+", Current Val: "+current_val+", Current sum: "+sum);
-						//current_val = 0;
 						q++;
 					}
+
 					con.commit();
 					int num_finished = tasks_finished.incrementAndGet();
-					con.close();
-					System.out.println("Done task "+task+", Read-only multi-point query. I am finisher number "+num_finished+". My sum is: "+sum);
-				} catch (SQLException e) {
-					System.err.println("Task "+task+" "+e.getMessage());
-				}
-			} else if(p >= 0.6 && p < 0.7) {
-				//Case 2: new tuple creation
-				try {
+					System.out.println("Done task " + task + ", Read-only multi-point query. I am finisher number " + num_finished + ". My sum is: " + sum);
+				} else if (p >= 0.6 && p < 0.7) {
+					//Case 2: new tuple creation
 					con.setAutoCommit(false);
 					con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-					int q = 0;
-					ps = con.prepareStatement("INSERT INTO blocking_data VALUES (?, ?, ?)",ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+					ps = con.prepareStatement("INSERT INTO blocking_data VALUES (?, ?, ?)", ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
 
 					ps.setInt(1, current_num_tuple.get());
-					ps.setDouble(2,rand.nextDouble()*max_value);
+					ps.setDouble(2, rand.nextDouble() * max_value);
 					ps.setInt(3, task);
 					ps.executeUpdate();
 					ps.clearParameters();
 
 					con.commit();
 					int num_finished = tasks_finished.incrementAndGet();
-					con.close();
 					current_num_tuple.incrementAndGet();
-					System.out.println("Done task "+task+", Insert tuple into DB with ID "+(current_num_tuple.get() - 1)+". I am finisher number "+num_finished);
-				} catch (SQLException e) {
-					System.err.println("Task "+task+" "+e.getMessage());
-				}
-			} else if (p >= 0.7 && p < 0.8) {
-				//Case 3: full table read-only scan
-				try {
+					System.out.println("Done task " + task + ", Insert tuple into DB with ID " + (current_num_tuple.get() - 1) + ". I am finisher number " + num_finished);
+				} else if (p >= 0.7 && p < 0.8) {
+					//Case 3: full table read-only scan
 					con.setAutoCommit(false);
 					con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-					int q = 0;
 					double sum = 0;
 					ps = con.prepareStatement("Select sum(data_value) from blocking_data");
-
 					rs = ps.executeQuery();
-					rs.next();
-					sum = sum + rs.getDouble("sum");
+					if (rs.next()) {
+						sum = sum + rs.getDouble("sum");
+					}
 					rs.close();
 
 					con.commit();
 					int num_finished = tasks_finished.incrementAndGet();
-					con.close();
-					System.out.println("Done task "+task+", Full table scan and sum. I am finisher number "+num_finished+ ". My sum is: "+sum);
-				} catch (SQLException e) {
-					System.err.println("Task "+task+" "+e.getMessage());
-				}
-			} else if (p >= 0.8 ) {
-				// Case 4: write query with (num_queries_per_task) 3 tuple update statements
-				try {
+					System.out.println("Done task " + task + ", Full table scan and sum. I am finisher number " + num_finished + ". My sum is: " + sum);
+				} else if (p >= 0.8) {
+					// Case 4: write query with (num_queries_per_task) 3 tuple update statements
 					con.setAutoCommit(false);
 					con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 					int q = 0;
 					int random_tuple = 0;
-					ps = con.prepareStatement("UPDATE blocking_data SET data_value = ?, modified_by = ? WHERE data_id = ?;",ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+					ps = con.prepareStatement("UPDATE blocking_data SET data_value = ?, modified_by = ? WHERE data_id = ?;", ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
 
-					while(q < num_queries_per_task) {//I want to execute num_queries_per_task update queries
+					while (q < num_queries_per_task) {//I want to execute num_queries_per_task update queries
 						random_tuple = ThreadLocalRandom.current().nextInt(current_num_tuple.get());
-						ps.setDouble(1, rand.nextDouble()*max_value); //data_value
+						ps.setDouble(1, rand.nextDouble() * max_value); //data_value
 						ps.setDouble(2, task); // modified_by
 						ps.setDouble(3, random_tuple); //data_id
 						//System.out.println("Started query "+q+" task "+task+" Executing "+ps); // debugging
 						ps.executeUpdate();
 						q++;
 					}
+
 					con.commit();
 					int num_finished = tasks_finished.incrementAndGet();
-					con.close();
-					System.out.println("Done task "+task+", Write Query with update. I am finisher number "+num_finished);
-				} catch (SQLException e) {
-					System.err.println("Task "+task+" "+e.getMessage());
+					System.out.println("Done task " + task + ", Write Query with update. I am finisher number " + num_finished);
 				}
+			} catch (SQLException e) {
+				aborted_tasks.incrementAndGet();
+				try {
+					con.rollback(); // release lock immediately
+				} catch (SQLException e2) {
+					e2.printStackTrace();
+				}
+			} finally { // Con close and queue new tasks
+				try {
+					con.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+				generateNewTask();
 			}
-		}	
+		}
 	}
 }
