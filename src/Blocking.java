@@ -34,7 +34,8 @@ import java.util.random.RandomGenerator;
 public class Blocking {
 	public static int num_starting_tasks = 30; // Initial starting tasks
 	public static int num_queries_per_task = 3;
-	
+	private static final String DEADLOCK_CODE = "40P01"; // PostgreSQL SQLSTATE for "deadlock detected"
+
 	Connection con;
 	ThreadPoolExecutor executor;
 	Random rand = new Random(123456);
@@ -44,14 +45,18 @@ public class Blocking {
 	AtomicInteger current_num_tuple;
 	AtomicInteger next_task;
 	AtomicInteger aborted_tasks;
+	AtomicInteger num_deadlocks;
 	volatile boolean run; // volatile needed for threads
-	
+	static StringBuilder errors;
+
 	public Blocking(){
 		tasks_finished = new AtomicInteger(0);
 		current_num_tuple = new AtomicInteger(num_tuple);
 		next_task = new AtomicInteger(0);
 		aborted_tasks = new AtomicInteger(0);
+		num_deadlocks = new AtomicInteger(0);
 		run = true;
+		errors = new StringBuilder();
 	}
 	
 	void executeSQL(String sql, Connection con){
@@ -114,7 +119,7 @@ public class Blocking {
 
 		// Start Transaction generation and execution
 		b.executor =
-				(ThreadPoolExecutor) Executors.newFixedThreadPool(4);//XXX - Do not change the number of threads used
+				(ThreadPoolExecutor) Executors.newFixedThreadPool(14);// Do change the number of threads used
 		long start = System.currentTimeMillis();
 		for (int i = 0; i < num_starting_tasks; i++) {
 			b.generateNewTask();
@@ -127,7 +132,12 @@ public class Blocking {
 		long stop = System.currentTimeMillis();
 
 		System.out.println("[DONE] Task execution after roughly "+((stop-start) / 1000.0)+" s. Task throughput: "+b.tasks_finished.get() / ((stop-start) / 1000.0)+
-				"Tasks/s. Tasks finished: "+b.tasks_finished+", Tasks aborted: "+b.aborted_tasks);
+				"Tasks/s. Tasks finished: "+b.tasks_finished.get()+", Tasks aborted: "+b.aborted_tasks.get()+", Deadlocks detected: "+b.num_deadlocks.get()+", Other SQL errors: "+(b.aborted_tasks.get() - b.num_deadlocks.get()));
+
+		// Print any existing errors
+		if (errors.isEmpty() == false) {
+			System.out.println(errors);
+		}
 	}
 	
 	/**
@@ -188,11 +198,12 @@ public class Blocking {
 					System.out.println("Done task " + task + ", Read-only multi-point query. I am finisher number " + num_finished + ". My sum is: " + sum);
 				} else if (p >= 0.6 && p < 0.7) {
 					//Case 2: new tuple creation
-					con.setAutoCommit(false);
+                    int tuple_id = current_num_tuple.getAndIncrement(); // immediately increment to prevent dual access of threads on the same val
+                    con.setAutoCommit(false);
 					con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 					ps = con.prepareStatement("INSERT INTO blocking_data VALUES (?, ?, ?)", ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
 
-					ps.setInt(1, current_num_tuple.get());
+					ps.setInt(1, tuple_id);
 					ps.setDouble(2, rand.nextDouble() * max_value);
 					ps.setInt(3, task);
 					ps.executeUpdate();
@@ -200,8 +211,7 @@ public class Blocking {
 
 					con.commit();
 					int num_finished = tasks_finished.incrementAndGet();
-					current_num_tuple.incrementAndGet();
-					System.out.println("Done task " + task + ", Insert tuple into DB with ID " + (current_num_tuple.get() - 1) + ". I am finisher number " + num_finished);
+					System.out.println("Done task " + task + ", Insert tuple into DB with ID " + tuple_id + ". I am finisher number " + num_finished);
 				} else if (p >= 0.7 && p < 0.8) {
 					//Case 3: full table read-only scan
 					con.setAutoCommit(false);
@@ -241,10 +251,19 @@ public class Blocking {
 				}
 			} catch (SQLException e) {
 				aborted_tasks.incrementAndGet();
-				try {
-					con.rollback(); // release lock immediately
-				} catch (SQLException e2) {
-					e2.printStackTrace();
+				if (DEADLOCK_CODE.equals(e.getSQLState())) { // check for deadlock
+					num_deadlocks.incrementAndGet();
+					try {
+						con.rollback(); // release lock immediately
+					} catch (SQLException e2) {
+						e2.printStackTrace();
+					}
+				} else { // real problem detected -> panic
+					e.printStackTrace();
+					errors.append(e.getSQLState() + "\n");
+					errors.append(e.getMessage() + "\n");
+					errors.append(Arrays.toString(e.getStackTrace()) + "\n");
+					throw new RuntimeException(e);
 				}
 			} finally { // Con close and queue new tasks
 				try {
