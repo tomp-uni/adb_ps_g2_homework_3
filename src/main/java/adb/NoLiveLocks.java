@@ -1,3 +1,7 @@
+package adb;
+
+import adb.util.ConnectionFactory;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
