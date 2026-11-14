@@ -1,0 +1,30 @@
+# IntelliJ project files (local setup, may contain credentials)
+.idea/
+*.iml
+out/
+
+# local DB credentials - not part of the submission
+*ConnectionFactory.java
+target/
+information/
+
+# Maven integration files
+/.classpath
+/.project
+/.settings/
+
+# Maven generated POM
+/dependency-reduced-pom.xml
+
+# Latex
+/presentation/*.aux
+/presentation/*.log
+/presentation/*.nav
+/presentation/*.out
+/presentation/*.snm
+/presentation/*.toc
+/presentation/*.vrb
+/presentation/*.fls
+/presentation/*.fdb_latexmk
+/presentation/*.synctex.gz
+/presentation/_minted*/
