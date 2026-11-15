@@ -2,6 +2,7 @@ package adb;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.util.Locale;
 import java.util.Arrays;
@@ -11,8 +12,10 @@ public class Benchmark {
     private RestartBlocking restartBlocking;
     private NoLiveLocks noLiveLocks;
     private File logFile;
-    public static int num_tasks; // Initial starting tasks
     static StringBuilder errors;
+    private int[] threadCounts;
+    private int numRuns;
+    private long durationMillis;
 
     public Benchmark() {
         blocking = new Blocking();
@@ -20,49 +23,78 @@ public class Benchmark {
         noLiveLocks = new NoLiveLocks();
 
         logFile = new File("benchmark_results.csv");
-        num_tasks = 30; // Initial starting tasks
+        threadCounts = new int[] { 1, 2, 4, 8 };
+        // threadCounts = new int[] { 1 }; // NOTE: temporary, revert to proper values
+        // later
+        numRuns = 3;
+        durationMillis = 30_000; // 60 seconds per run
 
     }
 
-    private void run_benchmark_all() throws Exception {
+    private void runBenchmarkBlocking(BufferedWriter logWriter) throws Exception {
+        for (int numThreads : threadCounts) {
+            double[][] results = new double[numRuns][2];
+            for (int i = 0; i < numRuns; i++) {
+                results[i] = blocking.benchmark(numThreads, durationMillis);
+            }
+
+            double[] averageResults = new double[2];
+            for (double[] result : results) {
+                averageResults[0] += result[0];
+                averageResults[1] += result[1];
+            }
+            averageResults[0] /= numRuns;
+            averageResults[1] /= numRuns;
+
+            logWriter.write(String.format(Locale.ROOT, "Blocking,%d,%d,%d,%.4f,%.4f",
+                    numThreads, numRuns, durationMillis, averageResults[0], averageResults[1]));
+            logWriter.newLine();
+            logWriter.flush();
+            System.out.println("Average results for " + numThreads + " thread(s): "
+                    + Arrays.toString(averageResults));
+        }
+    }
+
+    private void runBenchmarkRestartBlocking(BufferedWriter logWriter) throws Exception {
+        for (int numThreads : threadCounts) {
+            double[][] results = new double[numRuns][2];
+            for (int i = 0; i < numRuns; i++) {
+                results[i] = restartBlocking.benchmark(numThreads, durationMillis);
+            }
+
+            double[] averageResults = new double[2];
+            for (double[] result : results) {
+                averageResults[0] += result[0];
+                averageResults[1] += result[1];
+            }
+            averageResults[0] /= numRuns;
+            averageResults[1] /= numRuns;
+
+            logWriter.write(String.format(Locale.ROOT, "RestartBlocking,%d,%d,%d,%.4f,%.4f",
+                    numThreads, numRuns, durationMillis, averageResults[0], averageResults[1]));
+            logWriter.newLine();
+            logWriter.flush();
+            System.out.println("Average results for " + numThreads + " thread(s): "
+                    + Arrays.toString(averageResults));
+        }
+    }
+
+    private void runBenchmarkAll() throws Exception {
         try (BufferedWriter logWriter = new BufferedWriter(new FileWriter(logFile))) {
             logWriter.write("implementation,threads,runs,duration_ms,avg_elapsed_ms,avg_transactions_per_second");
             logWriter.newLine();
-            // int[] threadCounts = { 1, 2, 4, 8 };
-            int[] threadCounts = { 1 }; // NOTE: temüporary, revert to proper values later
-            int numRuns = 5;
-            long durationMillis = 60_000; // 60 seconds per run
-            for (int numThreads : threadCounts) {
-                double[][] results = new double[numRuns][2];
-                for (int i = 0; i < numRuns; i++) {
-                    results[i] = blocking.benchmark(numThreads, durationMillis);
-                }
+            runBenchmarkBlocking(logWriter);
+            runBenchmarkRestartBlocking(logWriter);
 
-                double[] averageResults = new double[2];
-                for (double[] result : results) {
-                    averageResults[0] += result[0];
-                    averageResults[1] += result[1];
-                }
-                averageResults[0] /= numRuns;
-                averageResults[1] /= numRuns;
-
-                logWriter.write(String.format(Locale.ROOT, "Blocking,%d,%d,%d,%.4f,%.4f",
-                        numThreads, numRuns, durationMillis, averageResults[0], averageResults[1]));
-                logWriter.newLine();
-                logWriter.flush();
-                System.out.println("Average results for " + numThreads + " thread(s): "
-                        + Arrays.toString(averageResults));
-            }
-            // TODO: add other classes to benchmark
         }
     }
 
     public static void main(String[] args) {
         Benchmark b = new Benchmark();
         try {
-            b.run_benchmark_all();
+            b.runBenchmarkAll();
         } catch (Exception e) {
-            System.out.println(e);
+            e.printStackTrace();
         }
     }
 

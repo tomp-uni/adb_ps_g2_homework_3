@@ -281,7 +281,8 @@ public class Blocking {
                             + num_finished + ". My sum is: " + sum);
                 } else if (p >= 0.6 && p < 0.7) {
                     // Case 2: new tuple creation
-                    int tuple_id = current_num_tuple.getAndIncrement(); // immediately increment to prevent dual access
+                    int tuple_id = current_num_tuple.getAndIncrement(); // immediately increment to prevent dual
+                                                                        // access
                                                                         // of threads on the same val
                     con.setAutoCommit(false);
                     con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
@@ -338,7 +339,8 @@ public class Blocking {
                     con.commit();
                     int num_finished = tasks_finished.incrementAndGet();
                     System.out.println(
-                            "Done task " + task + ", Write Query with update. I am finisher number " + num_finished);
+                            "Done task " + task + ", Write Query with update. I am finisher number "
+                                    + num_finished);
                 }
             } catch (SQLException e) {
                 aborted_tasks.incrementAndGet();
