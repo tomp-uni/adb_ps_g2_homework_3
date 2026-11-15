@@ -11,6 +11,8 @@ public class Benchmark {
     private RestartBlocking restartBlocking;
     private NoLiveLocks noLiveLocks;
     private File logFile;
+    public static int num_tasks; // Initial starting tasks
+    static StringBuilder errors;
 
     public Benchmark() {
         blocking = new Blocking();
@@ -18,6 +20,7 @@ public class Benchmark {
         noLiveLocks = new NoLiveLocks();
 
         logFile = new File("benchmark_results.csv");
+        num_tasks = 30; // Initial starting tasks
 
     }
 

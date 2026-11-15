@@ -11,6 +11,7 @@ import java.util.Random;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.random.RandomGenerator;
+import java.util.HashSet;
 
 /**
  * 
@@ -244,8 +245,9 @@ public class Blocking {
             RandomGenerator rng_for_p = RandomGenerator.getDefault(); // For true i.i.d behavior
             // p = rng_for_p.nextInt(11) / 10.0; // Outputs numbers from 0.0 to 1.0
             // (inclusive)
-            // TODO: check which version is intended, nextIn(11) & 10 != 0.0, so the
-            // distribution is not uniform
+            // TODO: check which version is intended, nextIn(11) leads to a uniform
+            // distribution of 11 values instead of 10.
+            // 10 is probably intended
             p = rng_for_p.nextDouble();
             // System.out.println("Current p: "+p);
             try {
@@ -258,8 +260,12 @@ public class Blocking {
                     int random_tuple = 0;
                     ps = con.prepareStatement("Select data_value from blocking_data where data_id = ?");
 
+                    HashSet<Integer> usedTuples = new HashSet<>();
                     while (q < num_queries_per_task) {
                         random_tuple = ThreadLocalRandom.current().nextInt(current_num_tuple.get());
+                        if (!usedTuples.add(random_tuple)) {
+                            continue;
+                        }
                         ps.setInt(1, random_tuple);
                         rs = ps.executeQuery();
                         if (rs.next()) {
