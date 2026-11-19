@@ -300,11 +300,7 @@ public class RestartBlocking {
                 }
                 throw new RuntimeException("Transaction " + task + " failed", e);
             }
-
-            // The standalone main runs a fixed batch with its own local executor.
-            if (executor != null) {
-                generateAndRunNewTask();
-            }
+            generateAndRunNewTask();
         }
 
         private String executeTransaction(Connection con, double p, int[] tupleIds,
