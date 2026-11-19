@@ -49,7 +49,7 @@ import java.util.HashSet;
  */
 
 public class Blocking {
-    public static int num_starting_tasks = 30; // Initial starting tasks
+    public static int num_starting_tasks = 8; // Initial starting tasks
     public static int num_queries_per_task = 3;
     private static final String DEADLOCK_CODE = "40P01"; // PostgreSQL SQLSTATE for "deadlock detected"
 
@@ -127,7 +127,7 @@ public class Blocking {
             } catch (RejectedExecutionException e) {
                 // do nothing, only happens on shutdown if a thread still wants to start a new
                 // execution
-                // and the narrowly passes the run = false check.
+                // and then narrowly passes the run = false check.
             }
         }
 

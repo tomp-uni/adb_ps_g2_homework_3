@@ -54,7 +54,7 @@ import java.util.random.RandomGenerator;
  */
 
 public class RestartBlocking {
-    public static int num_tasks = 30; // Initial starting tasks
+    public static int num_tasks = 8; // Initial starting tasks
     public static int num_queries_per_task = 3;
     private static final String DEADLOCK_CODE = "40P01";// PostgreSQL SQLSTATE for "deadlock detected"
 
@@ -134,7 +134,7 @@ public class RestartBlocking {
             } catch (RejectedExecutionException e) {
                 // do nothing, only happens on shutdown if a thread still wants to start a new
                 // execution
-                // and the narrowly passes the run = false check.
+                // and then narrowly passes the run = false check.
             }
         }
 
@@ -146,67 +146,68 @@ public class RestartBlocking {
         }
         double[] results = new double[2];
         // Create DB
-        cerateDB();
+        RestartBlocking rb = new RestartBlocking();
+        rb.cerateDB();
 
         // Start Transaction generation and execution
-        executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThreads);// Do change the number of threads
+        rb.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThreads);// Do change the number of threads
                                                                                  // used
         long start = System.currentTimeMillis();
         try {
             for (int i = 0; i < num_tasks; i++) {
-                generateNewTask();
+                rb.generateNewTask();
             }
 
             Thread.sleep(durationMillis);
         } finally {
-            run = false;
-            executor.shutdown();
+            rb.run = false;
+            rb.executor.shutdown();
         }
-        if (!executor.awaitTermination(10, TimeUnit.MINUTES)) {
-            executor.shutdownNow();
+        if (!rb.executor.awaitTermination(10, TimeUnit.MINUTES)) {
+            rb.executor.shutdownNow();
             throw new IllegalStateException(
                     "Benchmark workers did not terminate within 10 minutes; results are invalid.");
         }
         long stop = System.currentTimeMillis();
 
         System.out.println("[DONE] Task execution after roughly " + ((stop - start) / 1000.0) + " s. Task throughput: "
-                + tasks_finished.get() / ((stop - start) / 1000.0) +
-                "Tasks/s. Tasks finished: " + tasks_finished.get() + ", Tasks aborted: " + aborted_tasks.get()
-                + ", Deadlocks detected: " + num_deadlocks.get() + ", Restarts: "
-                + tasks_restarted.get());
+                + rb.tasks_finished.get() / ((stop - start) / 1000.0) +
+                "Tasks/s. Tasks finished: " + rb.tasks_finished.get() + ", Tasks aborted: " + rb.aborted_tasks.get()
+                + ", Deadlocks detected: " + rb.num_deadlocks.get() + ", Restarts: "
+                + rb.tasks_restarted.get());
 
         // Print any existing errors
         if (errors.isEmpty() == false) {
             System.out.println(errors);
         }
         results[0] = stop - start;
-        results[1] = tasks_finished.get() / ((stop - start) / 1000.0);
+        results[1] = rb.tasks_finished.get() / ((stop - start) / 1000.0);
         return results;
     }
 
     public static void main(String[] args) {
         // Create DB
-        RestartBlocking b = new RestartBlocking();
-        b.cerateDB();
+        RestartBlocking rb = new RestartBlocking();
+        rb.cerateDB();
 
         // Create task and their queries
         ArrayList<RestartBlocking.Blocker> my_tasks = new ArrayList<RestartBlocking.Blocker>(num_tasks);
         for (int task = 0; task < num_tasks; task++) {
-            my_tasks.add(b.new Blocker(task));
+            my_tasks.add(rb.new Blocker(task));
         }
 
         // Execute tasks
-        ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);// XXX - Do not change the
+        rb.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);// XXX - Do not change the
                                                                                            // number of threads used
         double start, stop;
         start = System.currentTimeMillis();
         for (Blocker task : my_tasks) {
-            executor.execute(task);
+            rb.executor.execute(task);
         }
-        executor.shutdown();
+        rb.executor.shutdown();
 
         // wait for the tasks to finish
-        while (!executor.isTerminated()) {
+        while (!rb.executor.isTerminated()) {
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
@@ -214,8 +215,8 @@ public class RestartBlocking {
             }
         }
         stop = System.currentTimeMillis();
-        System.out.println("[DONE] Task execution after roughly " + (stop - start) + " ms finished: " + b.tasks_finished
-                + " of " + num_tasks + ", restarts: " + b.tasks_restarted);
+        System.out.println("[DONE] Task execution after roughly " + (stop - start) + " ms finished: " + rb.tasks_finished
+                + " of " + num_tasks + ", restarts: " + rb.tasks_restarted);
     }
 
     /**
