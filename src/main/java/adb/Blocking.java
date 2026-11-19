@@ -49,7 +49,7 @@ import java.util.HashSet;
  */
 
 public class Blocking {
-    public static int num_starting_tasks = 8; // Initial starting tasks
+    public static int num_starting_tasks = 32; // Initial starting tasks
     public static int num_queries_per_task = 3;
     private static final String DEADLOCK_CODE = "40P01"; // PostgreSQL SQLSTATE for "deadlock detected"
 
@@ -118,7 +118,7 @@ public class Blocking {
         }
     }
 
-    void generateNewTask() {
+    void generateAndRunNewTask() {
         if (run == false) {
             return;
         } else {
@@ -130,7 +130,6 @@ public class Blocking {
                 // and then narrowly passes the run = false check.
             }
         }
-
     }
 
     public double[] benchmark(int numThreads, long durationMillis) throws InterruptedException {
@@ -148,7 +147,7 @@ public class Blocking {
         long start = System.currentTimeMillis();
         try {
             for (int i = 0; i < num_starting_tasks; i++) {
-                b.generateNewTask();
+                b.generateAndRunNewTask();
             }
 
             Thread.sleep(durationMillis);
@@ -156,7 +155,7 @@ public class Blocking {
             b.run = false;
             b.executor.shutdown();
         }
-        if (!b.executor.awaitTermination(10, TimeUnit.MINUTES)) {
+        if (!b.executor.awaitTermination(1, TimeUnit.MINUTES)) {
             b.executor.shutdownNow();
             throw new IllegalStateException(
                     "Benchmark workers did not terminate within 10 minutes; results are invalid.");
@@ -187,13 +186,13 @@ public class Blocking {
         b.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(14);// Do change the number of threads used
         long start = System.currentTimeMillis();
         for (int i = 0; i < num_starting_tasks; i++) {
-            b.generateNewTask();
+            b.generateAndRunNewTask();
         }
 
-        Thread.sleep(600000);
+        Thread.sleep(30000);
         b.run = false;
         b.executor.shutdown();
-        b.executor.awaitTermination(10, TimeUnit.MINUTES);
+        b.executor.awaitTermination(1, TimeUnit.MINUTES);
         long stop = System.currentTimeMillis();
 
         System.out.println("[DONE] Task execution after roughly " + ((stop - start) / 1000.0) + " s. Task throughput: "
@@ -215,13 +214,13 @@ public class Blocking {
      */
     public class Blocker implements Runnable {
         final int task;
+        double p;
         // final double [] start_range; // Not needed in this implementation
         // final double [] stop_range; // Not needed in this implementation
-        double p;
 
         public Blocker(int id) {
             this.task = id;
-            /*
+            /* Not needed in this implementation
              * this.start_range = new double[num_queries_per_task];
              * this.stop_range = new double[num_queries_per_task];
              * for(int q=0;q<num_queries_per_task;q++) {
@@ -364,7 +363,7 @@ public class Blocking {
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
-                generateNewTask();
+                generateAndRunNewTask();
             }
         }
     }
