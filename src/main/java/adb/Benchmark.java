@@ -23,7 +23,7 @@ public class Benchmark {
         noLiveLocks = new NoLiveLocks();
 
         logFile = new File("benchmark_results.csv");
-        threadCounts = new int[] { 1, 2, 4, 8 };
+        threadCounts = new int[] {1, 8, 12, 16};
         // threadCounts = new int[] { 1 }; // NOTE: temporary, revert to proper values
         // later
         numRuns = 3;
