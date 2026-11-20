@@ -1,6 +1,5 @@
-# adb_2026_task_2
-Task 2 of Winter Semester 2026/27 advanced database proseminar.
-Task 3 get's the same starter code.
+# adb_2026_task_3
+Task 3 of Winter Semester 2026/27 advanced database proseminar.
 
 Configure your local `src/main/java/adb/setup/ConnectionFactory.java` with the database connection settings.
 
@@ -21,4 +20,5 @@ mvn package
 java -cp target/adb-1.0-SNAPSHOT.jar adb.Blocking
 ```
 
+All three classes are runnable either as a standalone or with the benchmark class. 
 
