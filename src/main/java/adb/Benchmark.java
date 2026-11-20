@@ -27,8 +27,7 @@ public class Benchmark {
         // threadCounts = new int[] { 1 }; // NOTE: temporary, revert to proper values
         // later
         numRuns = 3;
-        durationMillis = 30_000; // 60 seconds per run
-
+        durationMillis = 30_000; // 30 seconds per run
     }
 
     private void runBenchmarkBlocking(BufferedWriter logWriter) throws Exception {
@@ -79,13 +78,38 @@ public class Benchmark {
         }
     }
 
+    private void runBenchmarkNoLiveLocks(BufferedWriter logWriter) throws Exception {
+        for (int numThreads : threadCounts) {
+            double[][] results = new double[numRuns][2];
+            for (int i = 0; i < numRuns; i++) {
+                results[i] = noLiveLocks.benchmark(numThreads, durationMillis);
+            }
+
+            double[] averageResults = new double[2];
+            for (double[] result : results) {
+                averageResults[0] += result[0];
+                averageResults[1] += result[1];
+            }
+
+            averageResults[0] /= numRuns;
+            averageResults[1] /= numRuns;
+
+            logWriter.write(String.format(Locale.ROOT, "NoLiveLocks,%d,%d,%d,%.4f,%.4f",
+                    numThreads, numRuns, durationMillis, averageResults[0], averageResults[1]));
+            logWriter.newLine();
+            logWriter.flush();
+            System.out.println("Average results for " + numThreads + " thread(s): "
+                    + Arrays.toString(averageResults));
+        }
+    }
+
     private void runBenchmarkAll() throws Exception {
         try (BufferedWriter logWriter = new BufferedWriter(new FileWriter(logFile))) {
             logWriter.write("implementation,threads,runs,duration_ms,avg_elapsed_ms,avg_transactions_per_second");
             logWriter.newLine();
             runBenchmarkBlocking(logWriter);
             runBenchmarkRestartBlocking(logWriter);
-
+            runBenchmarkNoLiveLocks(logWriter);
         }
     }
 
