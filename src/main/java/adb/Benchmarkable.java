@@ -12,22 +12,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class Benchmarkable {
     public final String identifier;
-    protected static int num_starting_tasks = 32; // Initial starting tasks
-    protected static int num_queries_per_task = 3;
-    protected Connection con;
-    protected ThreadPoolExecutor executor;
-    protected Random rand = new Random(123456);
-    protected int num_tuple = 5000;
-    protected double max_value = 50.0f;
-    protected AtomicInteger tasks_finished;
-    protected AtomicInteger current_num_tuple;
-    protected AtomicInteger next_task;
-    protected AtomicInteger aborted_tasks;
-    protected AtomicInteger num_deadlocks;
-    protected volatile boolean run; // volatile needed for threads
-    protected StringBuilder errors;
+    static int num_starting_tasks = 32; // Initial starting tasks
+    static int num_queries_per_task = 3;
+    Connection con;
+    ThreadPoolExecutor executor;
+    Random rand = new Random(123456);
+    int num_tuple = 5000;
+    double max_value = 50.0f;
+    AtomicInteger tasks_finished;
+    AtomicInteger current_num_tuple;
+    AtomicInteger next_task;
+    AtomicInteger aborted_tasks;
+    AtomicInteger num_deadlocks;
+    volatile boolean run; // volatile needed for threads
+    StringBuilder errors;
 
-    protected Benchmarkable(String id) {
+    Benchmarkable(String id) {
         this.identifier = id;
         tasks_finished = new AtomicInteger(0);
         current_num_tuple = new AtomicInteger(num_tuple);
@@ -39,7 +39,7 @@ public abstract class Benchmarkable {
 
     }
 
-    protected void executeSQL(String sql, Connection con) {
+    void executeSQL(String sql, Connection con) {
         java.sql.Statement stmt;
         try {
             stmt = con.createStatement();
@@ -51,7 +51,7 @@ public abstract class Benchmarkable {
         }
     }
 
-    protected void createDB() {
+    void createDB() {
         try {
             Connection con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);
             executeSQL("DROP TABLE IF EXISTS blocking_data;", con);
@@ -81,7 +81,7 @@ public abstract class Benchmarkable {
         }
     }
 
-    protected void generateAndRunNewTask() {
+    void generateAndRunNewTask() {
         if (run == false) {
             return;
         } else {
@@ -95,9 +95,9 @@ public abstract class Benchmarkable {
         }
     }
 
-    protected abstract Runnable createTask(int taskId);
+    abstract Runnable createTask(int taskId);
 
-    protected void resetRunState() {
+    void resetRunState() {
         run = true;
         tasks_finished.set(0);
         aborted_tasks.set(0);
