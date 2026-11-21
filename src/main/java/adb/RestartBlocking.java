@@ -6,12 +6,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Random;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -53,148 +49,38 @@ import java.util.random.RandomGenerator;
  *         # THE SOFTWARE.
  */
 
-public class RestartBlocking {
-    public static int num_tasks = 32; // Initial starting tasks
-    public static int num_queries_per_task = 3;
+public class RestartBlocking extends Benchmarkable {
     private static final String DEADLOCK_CODE = "40P01";// PostgreSQL SQLSTATE for "deadlock detected"
 
-    Connection con;
-    Random rand = new Random(123456);
-    int num_tuple = 50000;
-    double max_value = 50.0f;
-    AtomicInteger tasks_finished;
     AtomicInteger tasks_restarted;
-    AtomicInteger aborted_tasks;
-    AtomicInteger num_deadlocks;
-    ThreadPoolExecutor executor;
-    AtomicInteger next_task;
-    AtomicInteger current_num_tuple;
-    volatile boolean run;
-    static StringBuilder errors;
 
     public RestartBlocking() {
-        tasks_finished = new AtomicInteger(0);
+        super("RestartBlocking");
         tasks_restarted = new AtomicInteger(0);
-        aborted_tasks = new AtomicInteger(0);
-        num_deadlocks = new AtomicInteger(0);
-        next_task = new AtomicInteger(0);
-        current_num_tuple = new AtomicInteger(num_tuple);
-        run = true;
-        errors = new StringBuilder();
     }
 
-    void executeSQL(String sql, Connection con) {
-        java.sql.Statement stmt;
-        try {
-            stmt = con.createStatement();
-            stmt.execute(sql);
-            System.out.println("Executing " + sql);
-            stmt.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+    @Override
+    protected Runnable createTask(int taskId) {
+        return new Blocker(taskId);
     }
 
-    void cerateDB() {
-        try {
-            Connection con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);
-            executeSQL("DROP TABLE IF EXISTS blocking_data;", con);
-            executeSQL(
-                    "CREATE TABLE blocking_data ( data_id integer primary key, data_value float, modified_by integer);",
-                    con);
-
-            PreparedStatement ps;
-            con.setAutoCommit(false);
-            ps = con.prepareStatement("INSERT INTO blocking_data VALUES (?, ?, ?)", ResultSet.TYPE_SCROLL_SENSITIVE,
-                    ResultSet.CONCUR_UPDATABLE);
-
-            for (int i = 0; i < num_tuple; i++) {
-                ps.setInt(1, i);
-                ps.setDouble(2, rand.nextDouble() * max_value);
-                ps.setInt(3, 0);
-                ps.addBatch();
-                ps.clearParameters();
-            }
-
-            int[] results = ps.executeBatch();
-            con.commit();
-            con.close();
-            System.out.println(Arrays.toString(results));
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    void generateAndRunNewTask() {
-        if (run == false) {
-            return;
-        } else {
-            try {
-                executor.execute(new Blocker(next_task.getAndIncrement()));
-            } catch (RejectedExecutionException e) {
-                // do nothing, only happens on shutdown if a thread still wants to start a new
-                // execution
-                // and then narrowly passes the run = false check.
-            }
-        }
-    }
-
-    public double[] benchmark(int numThreads, long durationMillis) throws InterruptedException {
-        if (durationMillis <= 0) {
-            throw new IllegalArgumentException("Benchmark duration must be greater than zero milliseconds.");
-        }
-        double[] results = new double[2];
-        // Create DB
-        RestartBlocking rb = new RestartBlocking();
-        rb.cerateDB();
-
-        // Start Transaction generation and execution
-        rb.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThreads);// Do change the number of threads
-                                                                                 // used
-        long start = System.currentTimeMillis();
-        try {
-            for (int i = 0; i < num_tasks; i++) {
-                rb.generateAndRunNewTask();
-            }
-
-            Thread.sleep(durationMillis);
-        } finally {
-            rb.run = false;
-            rb.executor.shutdown();
-        }
-        if (!rb.executor.awaitTermination(1, TimeUnit.MINUTES)) {
-            rb.executor.shutdownNow();
-            throw new IllegalStateException(
-                    "Benchmark workers did not terminate within 10 minutes; results are invalid.");
-        }
-        long stop = System.currentTimeMillis();
-
-        System.out.println("[DONE] Task execution after roughly " + ((stop - start) / 1000.0) + " s. Task throughput: "
-                + rb.tasks_finished.get() / ((stop - start) / 1000.0) +
-                "Tasks/s. Tasks finished: " + rb.tasks_finished.get() + ", Tasks aborted: " + rb.aborted_tasks.get()
-                + ", Deadlocks detected: " + rb.num_deadlocks.get() + ", Restarts: "
-                + rb.tasks_restarted.get());
-
-        // Print any existing errors
-        if (errors.isEmpty() == false) {
-            System.out.println(errors);
-        }
-        results[0] = stop - start;
-        results[1] = rb.tasks_finished.get() / ((stop - start) / 1000.0);
-        return results;
+    @Override
+    protected void resetRunState() {
+        super.resetRunState();
+        tasks_restarted.set(0);
     }
 
     public static void main(String[] args) throws InterruptedException {
         // Create DB
         RestartBlocking rb = new RestartBlocking();
-        rb.cerateDB();
+        rb.createDB();
 
         // Start Transaction generation and execution
-        rb.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);// XXX -  Do change the number of threads
-                                                                                    // used
+        rb.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);// XXX - Do change the number of threads
+                                                                           // used
         long start = System.currentTimeMillis();
         try {
-            for (int i = 0; i < num_tasks; i++) {
+            for (int i = 0; i < num_starting_tasks; i++) {
                 rb.generateAndRunNewTask();
             }
 
@@ -217,8 +103,8 @@ public class RestartBlocking {
                 + rb.tasks_restarted.get());
 
         // Print any existing errors
-        if (errors.isEmpty() == false) {
-            System.out.println(errors);
+        if (rb.errors.isEmpty() == false) {
+            System.out.println(rb.errors);
         }
     }
 
@@ -261,11 +147,10 @@ public class RestartBlocking {
                 }
             } else if (p < 0.7) {
                 insertId = current_num_tuple.getAndIncrement();
-                values = new double[] {rand.nextDouble() * max_value};
+                values = new double[] { rand.nextDouble() * max_value };
             }
 
-            try (Connection con =
-                    ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL)) {
+            try (Connection con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL)) {
                 con.setAutoCommit(false);
                 con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                 boolean committed = false;
