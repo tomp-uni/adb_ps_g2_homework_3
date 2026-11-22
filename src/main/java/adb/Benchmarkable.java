@@ -12,12 +12,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class Benchmarkable {
     public final String identifier;
-    static int num_starting_tasks = 32; // Initial starting tasks
+    static int num_starting_tasks = 16; // Initial starting tasks
     static int num_queries_per_task = 3;
     Connection con;
     ThreadPoolExecutor executor;
     Random rand = new Random(123456);
-    int num_tuple = 5000;
+    int num_tuple = 50000;
     double max_value = 50.0f;
     AtomicInteger tasks_finished;
     AtomicInteger current_num_tuple;

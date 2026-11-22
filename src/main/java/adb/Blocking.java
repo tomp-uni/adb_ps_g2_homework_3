@@ -211,8 +211,8 @@ public class Blocking extends Benchmarkable {
                     while (q < num_queries_per_task) {// I want to execute num_queries_per_task update queries
                         random_tuple = ThreadLocalRandom.current().nextInt(current_num_tuple.get());
                         ps.setDouble(1, rand.nextDouble() * max_value); // data_value
-                        ps.setDouble(2, task); // modified_by
-                        ps.setDouble(3, random_tuple); // data_id
+                        ps.setInt(2, task); // modified_by
+                        ps.setInt(3, random_tuple); // data_id
                         // System.out.println("Started query "+q+" task "+task+" Executing "+ps); //
                         // debugging
                         ps.executeUpdate();

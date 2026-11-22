@@ -19,7 +19,7 @@ public class Benchmark {
 
     public Benchmark() {
         logFile = new File("benchmark_results.csv");
-        threadCounts = new int[] { 1, 8, 12, 16 };
+        threadCounts = new int[] { 1, 4, 10, 16 };
         numRuns = 3;
         durationMillis = 30_000; // 30 seconds per run
     }
