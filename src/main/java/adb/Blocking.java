@@ -118,6 +118,7 @@ public class Blocking extends Benchmarkable {
             Connection con = null;// XXX - Yes there needs to be a separate Connection per blocking taks.
                                   // Otherwise strange things can happen
             con = workerConnection.get(); // one connection per worker thread, reused across its transactions
+            // auto-commit off + READ COMMITTED are set once per connection in Benchmarkable (bottleneck fix)
             PreparedStatement ps;
             ResultSet rs;
 
@@ -132,8 +133,6 @@ public class Blocking extends Benchmarkable {
             try {
                 if (p < 0.6) {
                     // Case 1: read-only multi-point query
-                    con.setAutoCommit(false);
-                    con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                     int q = 0;
                     double sum = 0;
                     int random_tuple = 0;
@@ -163,8 +162,6 @@ public class Blocking extends Benchmarkable {
                     int tuple_id = current_num_tuple.getAndIncrement(); // immediately increment to prevent dual
                                                                         // access
                                                                         // of threads on the same val
-                    con.setAutoCommit(false);
-                    con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                     ps = con.prepareStatement("INSERT INTO blocking_data VALUES (?, ?, ?)",
                             ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
 
@@ -180,8 +177,6 @@ public class Blocking extends Benchmarkable {
                             + ". I am finisher number " + num_finished);
                 } else if (p >= 0.7 && p < 0.8) {
                     // Case 3: full table read-only scan
-                    con.setAutoCommit(false);
-                    con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                     double sum = 0;
                     ps = con.prepareStatement("Select sum(data_value) from blocking_data");
                     rs = ps.executeQuery();
@@ -196,8 +191,6 @@ public class Blocking extends Benchmarkable {
                             + num_finished + ". My sum is: " + sum);
                 } else if (p >= 0.8) {
                     // Case 4: write query with (num_queries_per_task) 3 tuple update statements
-                    con.setAutoCommit(false);
-                    con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                     int q = 0;
                     int random_tuple = 0;
                     ps = con.prepareStatement(

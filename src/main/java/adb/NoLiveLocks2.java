@@ -250,8 +250,7 @@ public class NoLiveLocks2 extends Benchmarkable {
     private void executeTask(TransactionTask task) {
         try {
             Connection connection = openConnection();
-            connection.setAutoCommit(false);
-            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            // auto-commit off + READ COMMITTED are set once per connection in Benchmarkable (bottleneck fix)
             while (true) {
                 if (Thread.currentThread().isInterrupted()) {
                     throw new SQLException("Transaction execution interrupted.", "57014");
