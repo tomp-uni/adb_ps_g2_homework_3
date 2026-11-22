@@ -6,7 +6,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,6 +29,14 @@ public abstract class Benchmarkable {
     AtomicInteger num_deadlocks;
     volatile boolean run; // volatile needed for threads
     StringBuilder errors;
+
+    // One connection per worker thread: opened on its first transaction and reused for all following ones
+    final List<Connection> workerConnections = Collections.synchronizedList(new ArrayList<>());
+    final ThreadLocal<Connection> workerConnection = ThreadLocal.withInitial(() -> {
+        Connection c = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);
+        workerConnections.add(c);
+        return c;
+    });
 
     Benchmarkable(String id) {
         this.identifier = id;
@@ -97,6 +108,19 @@ public abstract class Benchmarkable {
 
     abstract Runnable createTask(int taskId);
 
+    void closeWorkerConnections() {
+        synchronized (workerConnections) {
+            for (Connection c : workerConnections) {
+                try {
+                    c.close();
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                }
+            }
+            workerConnections.clear();
+        }
+    }
+
     void resetRunState() {
         run = true;
         tasks_finished.set(0);
@@ -136,6 +160,7 @@ public abstract class Benchmarkable {
                     "Benchmark workers did not terminate within 1 minutes; results are invalid.");
         }
         long stop = System.currentTimeMillis();
+        closeWorkerConnections();
 
         System.out.println("[DONE] Task execution after roughly " + ((stop - start) / 1000.0) + " s. Task throughput: "
                 + this.tasks_finished.get() / ((stop - start) / 1000.0) +

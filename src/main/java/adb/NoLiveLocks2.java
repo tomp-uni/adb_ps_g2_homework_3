@@ -1,6 +1,5 @@
 package adb;
 
-import adb.util.ConnectionFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -144,6 +143,7 @@ public class NoLiveLocks2 extends Benchmarkable {
             }
         }
         double elapsedMillis = (System.nanoTime() - start) / 1_000_000.0;
+        closeWorkerConnections();
         double throughput = tasks_finished.get() / (elapsedMillis / 1000.0);
         System.out.println("[DONE] " + identifier + ", batch size: " + batchSize
                 + ", elapsed: " + elapsedMillis / 1000.0 + " s, throughput: " + throughput
@@ -244,11 +244,12 @@ public class NoLiveLocks2 extends Benchmarkable {
     }
 
     protected Connection openConnection() throws SQLException {
-        return ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);
+        return workerConnection.get(); // one connection per worker thread, reused across its transactions
     }
 
     private void executeTask(TransactionTask task) {
-        try (Connection connection = openConnection()) {
+        try {
+            Connection connection = openConnection();
             connection.setAutoCommit(false);
             connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
             while (true) {

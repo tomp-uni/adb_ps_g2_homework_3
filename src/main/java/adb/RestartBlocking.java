@@ -1,6 +1,5 @@
 package adb;
 
-import adb.util.ConnectionFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -150,7 +149,8 @@ public class RestartBlocking extends Benchmarkable {
                 values = new double[] { rand.nextDouble() * max_value };
             }
 
-            try (Connection con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL)) {
+            try {
+                Connection con = workerConnection.get(); // one connection per worker thread, reused across its transactions
                 con.setAutoCommit(false);
                 con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                 boolean committed = false;
