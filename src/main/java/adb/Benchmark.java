@@ -10,7 +10,8 @@ public class Benchmark {
     private final Benchmarkable[] implementations = {
             new Blocking(),
             new RestartBlocking(),
-            new NoLiveLocks()
+            new NoLiveLocks(),
+            new NoLiveLocks2()
     };
     private File logFile;
     private int[] threadCounts;

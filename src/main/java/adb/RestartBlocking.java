@@ -227,7 +227,7 @@ public class RestartBlocking extends Benchmarkable {
                 try (PreparedStatement ps = con.prepareStatement(
                         "UPDATE blocking_data SET data_value = ?, modified_by = ? WHERE data_id = ?;")) {
                     for (int q = 0; q < tupleIds.length; q++) {
-                        ps.setDouble(1, (int) values[q]);
+                        ps.setDouble(1, (values[q]);
                         ps.setInt(2, task);
                         ps.setInt(3, tupleIds[q]);
                         ps.executeUpdate();
