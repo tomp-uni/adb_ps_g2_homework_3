@@ -34,6 +34,14 @@ public abstract class Benchmarkable {
     final List<Connection> workerConnections = Collections.synchronizedList(new ArrayList<>());
     final ThreadLocal<Connection> workerConnection = ThreadLocal.withInitial(() -> {
         Connection c = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);
+        // Bottleneck fix: set transaction mode once per connection instead of on every transaction
+        // (setTransactionIsolation sends an extra command to the server each time it is called)
+        try {
+            c.setAutoCommit(false);
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         workerConnections.add(c);
         return c;
     });

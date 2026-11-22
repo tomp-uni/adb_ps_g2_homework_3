@@ -151,8 +151,7 @@ public class RestartBlocking extends Benchmarkable {
 
             try {
                 Connection con = workerConnection.get(); // one connection per worker thread, reused across its transactions
-                con.setAutoCommit(false);
-                con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                // auto-commit off + READ COMMITTED are set once per connection in Benchmarkable (bottleneck fix)
                 boolean committed = false;
 
                 while (!committed) {
