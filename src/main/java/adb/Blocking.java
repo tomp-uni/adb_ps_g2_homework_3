@@ -1,6 +1,5 @@
 package adb;
 
-import adb.util.ConnectionFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -118,10 +117,7 @@ public class Blocking extends Benchmarkable {
         public void run() {
             Connection con = null;// XXX - Yes there needs to be a separate Connection per blocking taks.
                                   // Otherwise strange things can happen
-            con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);// XXX This is the class
-                                                                                                // you need to create,
-                                                                                                // but does not have to
-                                                                                                // be in the Repo
+            con = workerConnection.get(); // one connection per worker thread, reused across its transactions
             PreparedStatement ps;
             ResultSet rs;
 
@@ -241,12 +237,7 @@ public class Blocking extends Benchmarkable {
                     errors.append(Arrays.toString(e.getStackTrace()) + "\n");
                     throw new RuntimeException(e);
                 }
-            } finally { // Con close and queue new tasks
-                try {
-                    con.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
+            } finally { // queue new task; the connection stays open for this worker's next transaction
                 generateAndRunNewTask();
             }
         }
