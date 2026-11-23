@@ -11,7 +11,7 @@ public class Benchmark {
             new Blocking(),
             new RestartBlocking(),
             new NoLiveLocks(),
-            new NoLiveLocks2()
+            //new NoLiveLocks2() // Deprecated, decreased thorughput
     };
     private File logFile;
     private int[] threadCounts;
